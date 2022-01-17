@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <!--jQuery UI CSS CDN -->
+    <link href="https://code.jquery.com/ui/1.12.0/themes/smoothness/jquery-ui.css" rel="stylesheet">
+    <!-- basic jQuery is also required to run jQuery UI and it has to be before UI-library -->
+    <script src="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.5.1.js"></script>
+    <!--jQuery UI script CDN -->
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <script>
+        var custTypes = {};
+
+        $(document).ready(function () {
+            var dialog, form;
+
+            $("#notificationWidget").hide();
+            $("#connectionError").hide();
+
+
+            $.get("http://animalhospital.freemyip.com/customerbase/Types", function (data, status) {
+                if (status == "success") {
+                    custTypes = data;
+                    data.forEach((r) => {
+                        let optstr = `<option value="${r.customertypeid}">${r.abbreviation + " " + r.description}</option>`;
+                        $('.custType').append(optstr);
+                    });
+                }
+            }).fail(function (xhr) {
+                $("#connectionError").show();
+                console.log(xhr.responseJSON);
+            });
+
+            $("#search").click(function () {
+                searchCustomerData();
+            });
+
+            function addCustomer() {
+                if (validCustomer()) {
+                    $.post("http://animalhospital.freemyip.com/customerbase/Customer", {
+                        name: $("#newCustomerName").val(),
+                        address: $("#newCustomerAddress").val(),
+                        postalnumber: $("#newCustomerPostalnumber").val(),
+                        postaloffice: $("#newCustomerPostaloffice").val(),
+                        customertype: $('#newCustomerType').find(":selected").val()
+                    }, function (data, status, xhr) {
+                        // successful post request go here
+                        console.log(xhr);
+                        form[0].reset();
+                        $("#dialog-form").dialog('close');
+                        searchCustomerData();
+                        $("#addingNotifications").removeClass("ui-state-error");
+                        $("#addingNotifications").html("All form fields are required.")
+                    }).fail(function (xhr) {
+                        // if there's a failure, this is where it goes
+                        $("#addingNotifications").addClass("ui-state-error");
+                        $("#addingNotifications").html(xhr.responseJSON.error)
+                        console.log(xhr.responseJSON);
+                    })
+                }
+            }
+
+            function validCustomer() {
+                var custName = $("#newCustomerName").val();
+                var custAddress = $("#newCustomerAddress").val();
+                var postalNumber = $("#newCustomerPostalnumber").val();
+                var postalOffice = $("#newCustomerPostaloffice").val();
+                var customertype = $('#newCustomerType').find(":selected").val()
+                // validate all the fields and if not valid, no post request is to be sent
+                if (custName == "") {
+                    $("#addingNotifications").addClass("ui-state-error");
+                    $("#addingNotifications").html("Name is required");
+                    return false;
+                }
+                if (custAddress == "") {
+                    $("#addingNotifications").addClass("ui-state-error");
+                    $("#addingNotifications").html("Address is required");
+                    return false;
+                }
+                return true;
+            }
+
+            // ADD NEW CUSTOMER DIALOG
+            dialog = $("#dialog-form").dialog({
+                autoOpen: false,
+                height: 600,
+                width: 350,
+                modal: true,
+                buttons: {
+                    "Add new customer": addCustomer,
+                    Cancel: function () {
+                        $("#dialog-form").dialog("close");
+                    }
+                },
+                close: function () {
+                    form[0].reset();
+                }
+            });
+
+            form = dialog.find("form").on("submit", function (event) {
+                event.preventDefault(); // prevents loading the page from server
+                addCustomer();
+            });
+
+
+            // UPDATE CUSTOMER DIALOG
+            dialog = $("#dialog-UpdateCustomer").dialog({
+                autoOpen: false,
+                height: 600,
+                width: 350,
+                modal: true,
+                buttons: {
+                    "Update": function () {
+                        var updateID = $(this).data('id');
+                        sendEditToServer(updateID);
+                    },
+                    Cancel: function () {
+                        $("#dialog-UpdateCustomer").dialog("close");
+                    }
+                },
+                close: function () {
+                    form[0].reset();
+                }
+            });
+
+            $("#add-customer").click(function () {
+                $("#dialog-form").dialog("open");
+            });
+
+            $("#editCustomer").click(function () {
+                $("dialog-UpdateCustomer").dialog("open");
+            })
+
+
+        });
+
+        function searchCustomerData() {
+            $("#tabledata").empty();
+            // get the data and insert it into table
+
+            // FILL TABLE
+            $.get("http://animalhospital.freemyip.com/customerbase/Customer?" + $("#searchForm").serialize(), function (data, status, xhr) {
+                if (status == "success") {
+                    $("#notificationWidget").hide();
+                    if (data.length == 0)
+                        $("#notificationWidget").show();
+                    console.log(data); // when using get method, data is automatically converted js-object
+                    // we could also use string method mentioned in json.html
+                    data.map((x) => {
+                        var addStr = "";
+                        for (key of Object.keys(x)) {
+                            if (key == "customertype") {
+                                // custType is now one object from custTypes object array
+                                for (custType of custTypes) {
+                                    if (custType.customertypeid == x[key])
+                                        addStr += "<td>" + custType.description + "</td>"
+                                }
+                            }
+                            else if (key != "customerid")
+                                addStr += "<td>" + x[key] + "</td>";
+                        }
+                        addStr += "<td><button onclick='editCustomer(" + x.customerid + ")'>Edit </button></td>";
+                        $("#tabledata").append("<tr>" + addStr + "</tr>");
+                    })
+                }
+            });
+        }
+
+        function editCustomer(id) {
+            $.get("http://animalhospital.freemyip.com/customerbase/Customer/" + id, function (data, status, xhr) {
+                if (status == "success") {
+                    $("#editNotifications").html(" ");
+                    $("#editNotifications").removeClass("ui-state-error");
+                    $("#dialog-UpdateCustomer").data('id', id).dialog("open");
+                    data.map((element) => {
+                        $("#updatedCustomerName").val(element.name);
+                        $("#updatedCustomerAddress").val(element.address);
+                        $("#updatedCustomerPostalnumber").val(element.postalnumber);
+                        $("#updatedCustomerPostaloffice").val(element.postaloffice);
+                        $("#updatedCustomerType").val(element.customertype);
+                    })
+                }
+            });
+        }
+
+        function sendEditToServer(id) {
+            if(validCustomerEdit()) {
+            $.ajax({
+                type: "PUT", 
+                url: "http://animalhospital.freemyip.com/customerbase/Customer/" + id,
+                data: { 
+                    name: $("#updatedCustomerName").val(),
+                    address: $("#updatedCustomerAddress").val(),
+                    postalnumber: $("#updatedCustomerPostalnumber").val(),
+                    postaloffice: $("#updatedCustomerPostaloffice").val(),
+                    customertype: $('#updatedCustomerType').find(":selected").val()
+                },
+                success: function (result) {
+                    $("#dialog-UpdateCustomer").dialog('close');
+                    alert( "Customer data was edited successfully")
+                    searchCustomerData();
+                    $("#UpdateInformation")[0].reset();
+
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    console.log(jqXHR);
+                }
+            });
+            }
+        }
+
+        function validCustomerEdit() {
+                var custName = $("#updatedCustomerName").val();
+                var custAddress = $("#updatedCustomerAddress").val();
+                var postalNumber = $("#updatedCustomerPostalnumber").val();
+                var postalOffice = $("#updatedCustomerPostaloffice").val();
+                var customertype = $('#updatedCustomerType').find(":selected").val()
+                // validate all the fields and if not valid, no post request is to be sent
+                if (custName == "") {
+                    $("#editNotifications").addClass("ui-state-error");
+                    $("#editNotifications").html("Name is required");
+                    return false;
+                }
+                if (custAddress == "") {
+                    $("#editNotifications").addClass("ui-state-error");
+                    $("#editNotifications").html("Address is required");
+                    return false;
+                }
+                if (postalNumber == "") {
+                    $("#editNotifications").addClass("ui-state-error");
+                    $("#editNotifications").html("Postal Number is required");
+                    return false;
+                }
+                if (postalOffice == "") {
+                    $("#editNotifications").addClass("ui-state-error");
+                    $("#editNotifications").html("Postal Office is required");
+                    return false;
+                }
+                if (customertype == "") {
+                    $("#editNotifications").addClass("ui-state-error");
+                    $("#editNotifications").html("CustomerType is required");
+                    return false;
+                }
+                return true;
+            }
+    </script>
+</head>
+
+<body>
+    <div class="ui-widget" id="connectionError">
+        <div class="ui-state-error ui-corner-all" style="padding: 0 .7em;">
+            <p><span class="ui-icon ui-icon-alert" style="float: left; margin-right: .3em;"></span>
+                <strong>Alert:</strong> Error with the connection to server.
+            </p>
+        </div>
+    </div>
+
+    <div id="dialog-form" title="Add new customer">
+        <p class="validateTips" id="addingNotifications">All form fields are required.</p>
+
+        <form>
+            <fieldset>
+                <label for="newCustomerName">Name: </label><br>
+                <input type="text" name="name" id="newCustomerName"><br>
+                <label for="newCustomerAddress">Address: </label><br>
+                <input type="text" name="address" id="newCustomerAddress"><br>
+                <label for="newCustomerPostalnumber">postal number: </label><br>
+                <input type="text" name="postalnumber" id="newCustomerPostalnumber"><br>
+                <label for="newCustomerPostaloffice">postal office: </label><br>
+                <input type="text" name="postaloffice" id="newCustomerPostaloffice"><br>
+                <label for="newCustomerType">Customer type: </label><br>
+                <select name="customertype" class="custType" id="newCustomerType">
+                    <option value="" selected disabled>select customer type</option>
+                </select><br>
+
+                <!-- Allow form submission with keyboard without duplicating the dialog button -->
+                <input type="submit" tabindex="-1" style="position:absolute; top:-1000px">
+            </fieldset>
+        </form>
+    </div>
+
+
+    <div id="dialog-UpdateCustomer" title="Update Customer">
+        <p class="validateTips" id="editNotifications">All form fields are required.</p>
+
+        <form id="UpdateInformation">
+            <fieldset>
+                <label for="updatedCustomerName">Name: </label><br>
+                <input type="text" name="name" id="updatedCustomerName"><br>
+                <label for="updatedCustomerAddress">Address: </label><br>
+                <input type="text" name="address" id="updatedCustomerAddress"><br>
+                <label for="updatedCustomerPostalnumber">postal number: </label><br>
+                <input type="text" name="postalnumber" id="updatedCustomerPostalnumber"><br>
+                <label for="updatedCustomerPostaloffice">postal office: </label><br>
+                <input type="text" name="postaloffice" id="updatedCustomerPostaloffice"><br>
+                <label for="updatedCustomerType">Customer type: </label><br>
+                <select name="customertype" class="custType" id="updatedCustomerType">
+                    <option value="" selected disabled>select customer type</option>
+                </select><br>
+
+                <!-- Allow form submission with keyboard without duplicating the dialog button -->
+                <input type="submit" tabindex="-1" style="position:absolute; top:-1000px">
+            </fieldset>
+        </form>
+    </div>
+
+    <h1>Customers</h1>
+    <fieldset>
+        <legend>Search</legend>
+        <form id="searchForm">
+            <label for="name">Name: </label><br>
+            <input type="text" name="name" id="name"><br>
+            <label for="address">Address: </label><br>
+            <input type="text" name="address" id="address"><br>
+            <label for="postalnumber">postal number: </label><br>
+            <input type="text" name="postalnumber" id="postalnumber"><br>
+            <label for="postaloffice">postal office: </label><br>
+            <input type="text" name="postaloffice" id="postaloffice"><br>
+            <label for="customertype">Customer type: </label><br>
+            <select name="customertype" class="custType" id="customertype">
+                <option value="" selected>select customer type</option>
+            </select><br>
+
+        </form>
+        <br><button id="search">Search customers</button><br>
+        <div class="ui-widget" id="notificationWidget">
+            <div class="ui-state-highlight ui-corner-all" style="margin-top: 20px; padding: 0 .7em;">
+                <p><span class="ui-icon ui-icon-info" style="float: left; margin-right: .3em;"></span>
+                    No customers with current search criteria</p>
+            </div>
+        </div>
+    </fieldset>
+    <br><button id="add-customer">Add new customer</button><br>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Address</th>
+                <th>Postal number</th>
+                <th>Postal office</th>
+                <th>Created date</th>
+                <th>Customer type</th>
+                <th>Update</th>
+            </tr>
+        </thead>
+        <tbody id="tabledata">
+
+        </tbody>
+    </table>
+
+</body>
+
+</html>
